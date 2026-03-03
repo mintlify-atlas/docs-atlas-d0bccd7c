@@ -1,0 +1,404 @@
+---
+title: Authentication
+description: Learn how to authenticate requests to Lasso RPC
+---
+
+## Overview
+
+All Lasso RPC endpoints require API key authentication. You can provide your API key using three different methods: query parameter, custom header, or bearer token.
+
+<Note>
+API keys follow the format `lasso_...` and are configured in your Lasso deployment.
+</Note>
+
+## Authentication Methods
+
+### Query Parameter
+
+Add `?key=lasso_abc123` to the request URL.
+
+```bash
+curl -X POST 'http://localhost:4000/rpc/ethereum?key=lasso_abc123' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Advantages:**
+- Simple to implement
+- Works with all HTTP clients
+- Easy to test in browser
+
+**Disadvantages:**
+- API key visible in URL (logs, browser history)
+- Less secure than header-based authentication
+
+### Custom Header
+
+Add `X-Lasso-Api-Key` header to the request.
+
+```bash
+curl -X POST http://localhost:4000/rpc/ethereum \
+  -H 'Content-Type: application/json' \
+  -H 'X-Lasso-Api-Key: lasso_abc123' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Advantages:**
+- More secure (not visible in URLs)
+- Standard HTTP header pattern
+- Supported by all HTTP clients
+
+**Disadvantages:**
+- Requires custom header support
+
+<Tip>
+Use the custom header method for production applications to keep API keys out of server logs.
+</Tip>
+
+### Bearer Token
+
+Add `Authorization: Bearer lasso_abc123` header to the request.
+
+```bash
+curl -X POST http://localhost:4000/rpc/ethereum \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer lasso_abc123' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Advantages:**
+- Industry-standard OAuth 2.0 pattern
+- Widely supported by HTTP clients and frameworks
+- Most secure method
+
+**Disadvantages:**
+- None (recommended method)
+
+<Tip>
+Use Bearer token authentication for the best security and compatibility with standard HTTP libraries.
+</Tip>
+
+## Authentication Priority
+
+When multiple authentication methods are provided, Lasso uses this priority order:
+
+1. **Custom header**: `X-Lasso-Api-Key`
+2. **Bearer token**: `Authorization: Bearer ...`
+3. **Query parameter**: `?key=...`
+
+## WebSocket Authentication
+
+WebSocket connections use query parameter authentication.
+
+```bash
+wscat -c 'ws://localhost:4000/ws/rpc/ethereum?key=lasso_abc123'
+```
+
+**Example with JavaScript:**
+
+```javascript
+const ws = new WebSocket('ws://localhost:4000/ws/rpc/ethereum?key=lasso_abc123');
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'eth_subscribe',
+    params: ['newHeads'],
+    id: 1
+  }));
+};
+
+ws.onmessage = (event) => {
+  console.log('Received:', event.data);
+};
+```
+
+## Provider Authentication
+
+Lasso automatically handles authentication with upstream blockchain providers.
+
+### Provider API Keys
+
+Configure provider API keys in your provider configuration:
+
+```yaml
+providers:
+  - id: alchemy
+    url: https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+    api_key: YOUR_API_KEY  # Optional: for Bearer token auth
+```
+
+### Authentication Methods
+
+Lasso supports provider authentication via:
+
+1. **URL embedding**: API key in the URL path
+2. **Bearer token**: `Authorization: Bearer {api_key}` header
+3. **Custom headers**: Provider-specific headers
+
+### Example Configuration
+
+**URL embedding (most common):**
+
+```yaml
+providers:
+  - id: alchemy
+    url: https://eth-mainnet.g.alchemy.com/v2/abc123xyz
+```
+
+**Bearer token:**
+
+```yaml
+providers:
+  - id: quicknode
+    url: https://example.quiknode.pro
+    api_key: your_api_key_here
+```
+
+Lasso automatically adds:
+
+```
+Authorization: Bearer your_api_key_here
+```
+
+**Custom headers:**
+
+```yaml
+providers:
+  - id: custom
+    url: https://rpc.example.com
+    auth_headers:
+      X-Custom-Auth: secret_token
+      X-API-Version: v1
+```
+
+## Authentication Errors
+
+### Missing API Key
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:4000/rpc/ethereum \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": null,
+  "error": {
+    "code": 4100,
+    "message": "Unauthorized: missing or invalid API key"
+  }
+}
+```
+
+### Invalid API Key
+
+**Request:**
+
+```bash
+curl -X POST 'http://localhost:4000/rpc/ethereum?key=invalid_key' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": null,
+  "error": {
+    "code": 4100,
+    "message": "Unauthorized: invalid API key"
+  }
+}
+```
+
+### Provider Authentication Error
+
+When an upstream provider rejects authentication, Lasso automatically fails over to the next provider.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "All providers failed: authentication errors"
+  }
+}
+```
+
+<Note>
+Authentication errors (`:auth_error`) are considered retriable, and Lasso will attempt failover to other providers in the strategy list.
+</Note>
+
+## Security Best Practices
+
+### API Key Management
+
+1. **Never commit API keys to version control**
+   - Use environment variables
+   - Use secret management tools (AWS Secrets Manager, HashiCorp Vault)
+
+2. **Rotate keys periodically**
+   - Set expiration policies
+   - Implement key rotation procedures
+
+3. **Use different keys per environment**
+   - Development, staging, production
+   - Per-application or per-team keys
+
+4. **Monitor key usage**
+   - Track request patterns
+   - Alert on unusual activity
+
+### Transport Security
+
+1. **Always use HTTPS in production**
+   ```bash
+   https://your-lasso-instance.com/rpc/ethereum?key=lasso_abc123
+   ```
+
+2. **Use WSS for WebSocket connections**
+   ```bash
+   wss://your-lasso-instance.com/ws/rpc/ethereum?key=lasso_abc123
+   ```
+
+3. **Enable TLS 1.2 or higher**
+
+### Rate Limiting
+
+Lasso tracks rate limits per API key:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "Rate limit exceeded. Limit: 100 requests per second.",
+    "data": {
+      "retry_after_ms": 150,
+      "rate_limit": 100
+    }
+  }
+}
+```
+
+### CORS Configuration
+
+Lasso allows all origins by default (`*`). Restrict in production:
+
+```elixir
+config :lasso, LassoWeb.Endpoint,
+  cors_origins: ["https://your-app.com"],
+  cors_max_age: 86400
+```
+
+Allowed headers:
+- `Content-Type`
+- `Authorization`
+- `X-Requested-With`
+- `X-Lasso-Api-Key`
+- `X-Lasso-Provider`
+- `X-Lasso-Transport`
+
+## Examples
+
+### JavaScript (Fetch API)
+
+```javascript
+const response = await fetch('http://localhost:4000/rpc/ethereum', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer lasso_abc123'
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'eth_blockNumber',
+    params: [],
+    id: 1
+  })
+});
+
+const data = await response.json();
+console.log(data.result);
+```
+
+### Python (requests)
+
+```python
+import requests
+
+response = requests.post(
+    'http://localhost:4000/rpc/ethereum',
+    headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer lasso_abc123'
+    },
+    json={
+        'jsonrpc': '2.0',
+        'method': 'eth_blockNumber',
+        'params': [],
+        'id': 1
+    }
+)
+
+print(response.json()['result'])
+```
+
+### Go (net/http)
+
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+func main() {
+    body := map[string]interface{}{
+        "jsonrpc": "2.0",
+        "method":  "eth_blockNumber",
+        "params":  []interface{}{},
+        "id":      1,
+    }
+
+    jsonBody, _ := json.Marshal(body)
+    req, _ := http.NewRequest("POST", "http://localhost:4000/rpc/ethereum", bytes.NewBuffer(jsonBody))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer lasso_abc123")
+
+    client := &http.Client{}
+    resp, _ := client.Do(req)
+    defer resp.Body.Close()
+
+    var result map[string]interface{}
+    json.NewDecoder(resp.Body).Decode(&result)
+    fmt.Println(result["result"])
+}
+```
+
+### cURL with Environment Variable
+
+```bash
+# Set API key as environment variable
+export LASSO_API_KEY=lasso_abc123
+
+# Use in requests
+curl -X POST http://localhost:4000/rpc/ethereum \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $LASSO_API_KEY" \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```

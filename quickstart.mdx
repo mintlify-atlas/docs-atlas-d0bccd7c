@@ -1,80 +1,188 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get Lasso RPC running in minutes and make your first JSON-RPC request
 ---
 
-## Get started in three steps
+Get your RPC proxy running and make your first request in under 5 minutes.
 
-Get your documentation site running locally and make your first customization.
+## Quick start
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Prerequisites">
+    Before you begin, ensure you have:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    - **Elixir** 1.17+ (`elixir --version`)
+    - **Erlang/OTP** 26+ (`erl -version`)
+    - **Node.js** 18+ (for asset compilation)
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Tip>
+    Don't have these installed? See the [Installation](/installation) guide for platform-specific instructions.
+    </Tip>
+  </Step>
 
-### Step 2: Deploy your changes
+  <Step title="Clone and install">
+    ```bash
+    # Clone the repository
+    git clone https://github.com/jaxernst/lasso-rpc
+    cd lasso-rpc
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    # Install dependencies
+    mix deps.get
+
+    # Start the server
+    mix phx.server
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    The application will be available at `http://localhost:4000` and the dashboard at `http://localhost:4000/dashboard`.
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Make your first request">
+    Test the RPC proxy with a simple `eth_blockNumber` call:
+    
+    <CodeGroup>
+    ```bash curl
+    curl -X POST http://localhost:4000/rpc/ethereum \
+      -H 'Content-Type: application/json' \
+      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```javascript JavaScript
+    const response = await fetch('http://localhost:4000/rpc/ethereum', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_blockNumber',
+        params: [],
+        id: 1
+      })
+    });
+    const data = await response.json();
+    console.log(data.result); // "0x12a4567"
+    ```
 
-### Step 3: Go live
+    ```python Python
+    import requests
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    response = requests.post('http://localhost:4000/rpc/ethereum',
+      json={
+        'jsonrpc': '2.0',
+        'method': 'eth_blockNumber',
+        'params': [],
+        'id': 1
+      }
+    )
+    print(response.json()['result'])  # "0x12a4567"
+    ```
+    </CodeGroup>
+
+    You'll get a response like:
+    ```json
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": "0x12a4567"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Try different routing strategies
+
+Lasso routes requests using intelligent strategies. Try each one:
+
+<CodeGroup>
+```bash Fastest
+# Route to the fastest provider based on measured latency
+curl -X POST http://localhost:4000/rpc/fastest/ethereum \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+```bash Load Balanced
+# Distribute requests evenly across healthy providers
+curl -X POST http://localhost:4000/rpc/load-balanced/ethereum \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+```bash Latency Weighted
+# Route more traffic to faster providers
+curl -X POST http://localhost:4000/rpc/latency-weighted/ethereum \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+</CodeGroup>
+
+## Inspect routing metadata
+
+See which provider handled your request:
+
+```bash
+curl -X POST 'http://localhost:4000/rpc/ethereum?include_meta=headers' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+  -i
+```
+
+Look for the `X-Lasso-Meta` header with base64-encoded routing information.
+
+## Try WebSocket subscriptions
+
+Subscribe to new blocks in real-time:
+
+```bash
+wscat -c ws://localhost:4000/ws/rpc/ethereum
+> {"jsonrpc":"2.0","method":"eth_subscribe","params":["newHeads"],"id":1}
+```
+
+You'll receive a subscription ID, then live block headers as they arrive.
+
+## Explore the dashboard
+
+Open `http://localhost:4000/dashboard` to see:
+
+- **Provider performance** - Latency, success rate, and circuit breaker status
+- **Request flow** - Real-time routing decisions
+- **System metrics** - Memory, CPU, and throughput
+
+## Docker alternative
+
+Prefer Docker? Use the convenience script:
+
+```bash
+./run-docker.sh
+```
+
+The application will be available at `http://localhost:4000`.
+
+<Warning>
+The `run-docker.sh` script generates a `SECRET_KEY_BASE` for you. For production deployments, set this explicitly. See [Deployment](/deployment/production-checklist) for details.
+</Warning>
+
+## What's included in the default profile
+
+The `config/profiles/default.yml` profile is pre-configured with free public providers:
+
+- **Ethereum**: LlamaRPC, PublicNode, dRPC, Merkle, 1RPC, and more
+- **Base**: LlamaRPC, Base Official, PublicNode, dRPC, Lava
+- **Arbitrum**: Arbitrum Foundation, LlamaRPC, dRPC
+
+No API keys required to get started.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Configuration" icon="gear" href="/configuration/overview">
+    Customize providers, routing, and rate limits
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/http-endpoints">
+    Explore HTTP and WebSocket endpoints
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/deployment/docker">
+    Deploy to production with Docker or Kubernetes
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/observability/dashboard">
+    Monitor provider performance and routing
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
